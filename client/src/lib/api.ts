@@ -5,15 +5,9 @@ export interface QueryRequest {
 }
 
 export interface QueryResponse {
-  status:
-    | "GENERATED"
-    | "NO_CONFIDENT_MATCH"
-    | "GENERATION_FAILED";
-
+  status: "GENERATED" | "NO_CONFIDENT_MATCH" | "GENERATION_FAILED";
   queryHistoryId: string | null;
-
   answer: string | null;
-
   explanation: string | null;
 
   currentStep: {
@@ -70,10 +64,7 @@ export interface QueryResponse {
 export interface QueryHistoryItem {
   id: string;
   query: string;
-  status:
-    | "GENERATED"
-    | "NO_CONFIDENT_MATCH"
-    | "GENERATION_FAILED";
+  status: "GENERATED" | "NO_CONFIDENT_MATCH" | "GENERATION_FAILED";
   answer: string | null;
   explanation: string | null;
   selectedStepId: string | null;
@@ -95,27 +86,18 @@ export interface QueryHistoryResponse {
 export async function submitQuery(
   payload: QueryRequest,
 ): Promise<QueryResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/query`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${API_BASE_URL}/query`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
-  const body = await response
-    .json()
-    .catch(() => null);
+  const body = await response.json().catch(() => null);
 
   if (!response.ok) {
-    throw new Error(
-      body?.error ||
-        body?.message ||
-        "Failed to submit query.",
-    );
+    throw new Error(body?.error || body?.message || "Failed to submit query.");
   }
 
   return body as QueryResponse;
@@ -124,49 +106,33 @@ export async function submitQuery(
 export async function getQueryHistory(
   limit = 20,
 ): Promise<QueryHistoryResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/query/history?limit=${limit}`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
+  const response = await fetch(`${API_BASE_URL}/query/history?limit=${limit}`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const body = await response
-    .json()
-    .catch(() => null);
+  const body = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
-      body?.error ||
-        body?.message ||
-        "Failed to load query history.",
+      body?.error || body?.message || "Failed to load query history.",
     );
   }
 
   return body as QueryHistoryResponse;
 }
 
-export async function getQueryHistoryItem(
-  id: string,
-): Promise<QueryResponse> {
-  const response = await fetch(
-    `${API_BASE_URL}/query/history/${id}`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
+export async function getQueryHistoryItem(id: string): Promise<QueryResponse> {
+  const response = await fetch(`${API_BASE_URL}/query/history/${id}`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const body = await response
-    .json()
-    .catch(() => null);
+  const body = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
-      body?.error ||
-        body?.message ||
-        "Failed to load query history item.",
+      body?.error || body?.message || "Failed to load query history item.",
     );
   }
 
@@ -178,26 +144,19 @@ export async function submitFeedback(payload: {
   type: "helpful" | "not_helpful";
   comment?: string;
 }) {
-  const response = await fetch(
-    `${API_BASE_URL}/feedback`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+  const response = await fetch(`${API_BASE_URL}/feedback`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
     },
-  );
+    body: JSON.stringify(payload),
+  });
 
-  const body = await response
-    .json()
-    .catch(() => null);
+  const body = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
-      body?.error ||
-        body?.message ||
-        "Failed to submit feedback.",
+      body?.error || body?.message || "Failed to submit feedback.",
     );
   }
 
@@ -212,25 +171,42 @@ export interface AdminMetrics {
 }
 
 export async function getAdminMetrics(): Promise<AdminMetrics> {
-  const response = await fetch(
-    `${API_BASE_URL}/admin/metrics`,
-    {
-      method: "GET",
-      cache: "no-store",
-    },
-  );
+  const response = await fetch(`${API_BASE_URL}/admin/metrics`, {
+    method: "GET",
+    cache: "no-store",
+  });
 
-  const body = await response
-    .json()
-    .catch(() => null);
+  const body = await response.json().catch(() => null);
 
   if (!response.ok) {
     throw new Error(
-      body?.error ||
-        body?.message ||
-        "Failed to load admin metrics.",
+      body?.error || body?.message || "Failed to load admin metrics.",
     );
   }
 
   return body as AdminMetrics;
+}
+
+export interface SystemHealth {
+  status: "ok" | "degraded" | "error";
+  database?: "connected" | "disconnected";
+  embedding?: "configured" | "not_configured";
+  llm?: "configured" | "not_configured";
+}
+
+export async function getHealth(): Promise<SystemHealth> {
+  const response = await fetch(`${API_BASE_URL}/health`, {
+    method: "GET",
+    cache: "no-store",
+  });
+
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(
+      body?.error || body?.message || "Backend health check failed.",
+    );
+  }
+
+  return body as SystemHealth;
 }

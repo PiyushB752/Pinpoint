@@ -1,0 +1,1 @@
+ALTER TABLE "query_history" ADD COLUMN "relevance" integer;

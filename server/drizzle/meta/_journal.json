@@ -22,6 +22,13 @@
       "when": 1791270744532,
       "tag": "0002_nifty_ogun",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791435893364,
+      "tag": "0003_wealthy_morg",
+      "breakpoints": true
     }
   ]
 }
