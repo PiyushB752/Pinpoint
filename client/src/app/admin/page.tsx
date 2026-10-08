@@ -17,6 +17,8 @@ interface SystemHealth {
   llm?: "configured" | "not_configured";
 }
 
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
+
 export default function AdminPage() {
   const [metrics, setMetrics] =
     useState<AdminMetrics | null>(null);
@@ -39,13 +41,10 @@ export default function AdminPage() {
         const [metricsResponse, healthResponse] =
           await Promise.all([
             getAdminMetrics(),
-            fetch(
-              "http://localhost:4000/v1/health",
-              {
-                method: "GET",
-                cache: "no-store",
-              },
-            ),
+            fetch(`${API_BASE_URL}/health`, {
+              method: "GET",
+              cache: "no-store",
+            }),
           ]);
 
         if (!healthResponse.ok) {
