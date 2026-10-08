@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import path from "node:path";
 
 import {
   eq,
@@ -74,8 +75,14 @@ export class IngestionService {
       );
 
     try {
-      const file = await fs.readFile(
+      const sourcePath = path.resolve(
+        process.cwd(),
+        "uploads",
         version.sourcePath,
+      );
+
+      const file = await fs.readFile(
+        sourcePath,
       );
 
       const parser = getParser(

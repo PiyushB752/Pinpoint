@@ -1,4 +1,3 @@
-
 import type { FastifyInstance } from "fastify";
 
 import { createHash } from "node:crypto";
@@ -11,6 +10,7 @@ import {
   documentVersions,
 } from "../../db/schema.js";
 import { storeDocument } from "../../storage/document-storage.js";
+import { IngestionService } from "../../ingestion/ingestion-service.js";
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
@@ -120,164 +120,223 @@ function isFileTooLargeError(error: unknown): boolean {
 export async function documentUploadRoutes(
   app: FastifyInstance,
 ) {
-  app.post("/documents/upload", async (request, reply) => {
-    let storedPath: string | undefined;
+  const ingestionService =
+    new IngestionService();
 
-    try {
-      const file = await request.file({
-        limits: {
-          files: 1,
-          fields: 0,
-          fileSize: MAX_FILE_SIZE,
-        },
-      });
+  app.post(
+    "/documents/upload",
+    async (request, reply) => {
+      let storedPath: string | undefined;
 
-      if (!file) {
-        return reply.status(400).send({
-          status: "error",
-          message: 'Upload one document using the multipart field "file".',
+      try {
+        const file = await request.file({
+          limits: {
+            files: 1,
+            fields: 0,
+            fileSize: MAX_FILE_SIZE,
+          },
         });
-      }
 
-      if (file.fieldname !== "file") {
-        file.file.resume();
-
-        return reply.status(400).send({
-          status: "error",
-          message: 'The upload field must be named "file".',
-        });
-      }
-
-      const originalFilename = file.filename;
-
-      // Reject paths rather than allowing a client-supplied path to be used.
-      if (
-        !originalFilename ||
-        originalFilename !== path.basename(originalFilename) ||
-        originalFilename.includes("/") ||
-        originalFilename.includes("\\") ||
-        originalFilename === "." ||
-        originalFilename === ".."
-      ) {
-        file.file.resume();
-
-        return reply.status(400).send({
-          status: "error",
-          message: "Invalid filename.",
-        });
-      }
-
-      const extension = path.extname(originalFilename).toLowerCase();
-
-      if (!ALLOWED_EXTENSIONS.has(extension)) {
-        file.file.resume();
-
-        return reply.status(400).send({
-          status: "error",
-          message: "Unsupported file extension.",
-        });
-      }
-
-      const buffer = await file.toBuffer();
-
-      if (file.file.truncated || buffer.length > MAX_FILE_SIZE) {
-        return reply.status(413).send({
-          status: "error",
-          message: "The file exceeds the 20 MB limit.",
-        });
-      }
-
-      const validationError = validateFile(
-        originalFilename,
-        file.mimetype,
-        buffer,
-      );
-
-      if (validationError) {
-        return reply.status(400).send({
-          status: "error",
-          message: validationError,
-        });
-      }
-
-      const title = path.basename(originalFilename, extension);
-
-      const contentHash = createHash("sha256")
-        .update(buffer)
-        .digest("hex");
-
-      const storageResult = await storeDocument(buffer, extension);
-
-      storedPath = storageResult.absolutePath;
-
-      const created = await db.transaction(async (tx) => {
-        const [document] = await tx
-          .insert(documents)
-          .values({ title })
-          .returning({
-            id: documents.id,
-            title: documents.title,
+        if (!file) {
+          return reply.status(400).send({
+            status: "error",
+            message:
+              'Upload one document using the multipart field "file".',
           });
+        }
 
-        const [version] = await tx
-          .insert(documentVersions)
-          .values({
-            documentId: document.id,
-            version: "1.0",
-            status: "draft",
-            ingestionStatus: "queued",
+        if (file.fieldname !== "file") {
+          file.file.resume();
+
+          return reply.status(400).send({
+            status: "error",
+            message:
+              'The upload field must be named "file".',
+          });
+        }
+
+        const originalFilename =
+          file.filename;
+
+        // Reject paths rather than allowing a client-supplied path to be used.
+        if (
+          !originalFilename ||
+          originalFilename !==
+            path.basename(originalFilename) ||
+          originalFilename.includes("/") ||
+          originalFilename.includes("\\") ||
+          originalFilename === "." ||
+          originalFilename === ".."
+        ) {
+          file.file.resume();
+
+          return reply.status(400).send({
+            status: "error",
+            message: "Invalid filename.",
+          });
+        }
+
+        const extension =
+          path.extname(originalFilename).toLowerCase();
+
+        if (!ALLOWED_EXTENSIONS.has(extension)) {
+          file.file.resume();
+
+          return reply.status(400).send({
+            status: "error",
+            message:
+              "Unsupported file extension.",
+          });
+        }
+
+        const buffer =
+          await file.toBuffer();
+
+        if (
+          file.file.truncated ||
+          buffer.length > MAX_FILE_SIZE
+        ) {
+          return reply.status(413).send({
+            status: "error",
+            message:
+              "The file exceeds the 20 MB limit.",
+          });
+        }
+
+        const validationError =
+          validateFile(
             originalFilename,
-            sourcePath: storageResult.storageKey,
-            contentHash,
-          })
-          .returning({
-            id: documentVersions.id,
-            version: documentVersions.version,
-            status: documentVersions.status,
-            ingestionStatus: documentVersions.ingestionStatus,
-          });
-
-        return { document, version };
-      });
-
-      // The file and database record have both been created successfully.
-      storedPath = undefined;
-
-      return reply.status(202).send({
-        status: "queued",
-        message:
-          "Document stored successfully. Ingestion has not started yet.",
-        document: created.document,
-        version: created.version,
-        originalFilename,
-        contentHash,
-      });
-    } catch (error) {
-      if (storedPath) {
-        await unlink(storedPath).catch((cleanupError: unknown) => {
-          request.log.error(
-            { err: cleanupError },
-            "Failed to remove uploaded file after an error",
+            file.mimetype,
+            buffer,
           );
-        });
-      }
 
-      if (isFileTooLargeError(error)) {
-        return reply.status(413).send({
+        if (validationError) {
+          return reply.status(400).send({
+            status: "error",
+            message: validationError,
+          });
+        }
+
+        const title =
+          path.basename(
+            originalFilename,
+            extension,
+          );
+
+        const contentHash =
+          createHash("sha256")
+            .update(buffer)
+            .digest("hex");
+
+        const storageResult =
+          await storeDocument(
+            buffer,
+            extension,
+          );
+
+        storedPath =
+          storageResult.absolutePath;
+
+        const created =
+          await db.transaction(
+            async (tx) => {
+              const [document] =
+                await tx
+                  .insert(documents)
+                  .values({ title })
+                  .returning({
+                    id: documents.id,
+                    title: documents.title,
+                  });
+
+              const [version] =
+                await tx
+                  .insert(
+                    documentVersions,
+                  )
+                  .values({
+                    documentId:
+                      document.id,
+                    version: "1.0",
+                    status: "draft",
+                    ingestionStatus:
+                      "queued",
+                    originalFilename,
+                    sourcePath:
+                      storageResult.storageKey,
+                    contentHash,
+                  })
+                  .returning({
+                    id: documentVersions.id,
+                    version:
+                      documentVersions.version,
+                    status:
+                      documentVersions.status,
+                    ingestionStatus:
+                      documentVersions.ingestionStatus,
+                  });
+
+              return {
+                document,
+                version,
+              };
+            },
+          );
+
+        // The file and database record have both
+        // been created successfully.
+        storedPath = undefined;
+
+        await ingestionService.ingestDocumentVersion(
+          created.version.id,
+        );
+
+        return reply.status(201).send({
+          status: "indexed",
+          message:
+            "Document uploaded and indexed successfully.",
+          document: created.document,
+          version: {
+            ...created.version,
+            ingestionStatus:
+              "indexed",
+          },
+          originalFilename,
+          contentHash,
+        });
+      } catch (error) {
+        if (storedPath) {
+          await unlink(storedPath).catch(
+            (cleanupError: unknown) => {
+              request.log.error(
+                { err: cleanupError },
+                "Failed to remove uploaded file after an error",
+              );
+            },
+          );
+        }
+
+        if (
+          isFileTooLargeError(error)
+        ) {
+          return reply.status(413).send({
+            status: "error",
+            message:
+              "The file exceeds the 20 MB limit.",
+          });
+        }
+
+        request.log.error(
+          { err: error },
+          "Document upload failed",
+        );
+
+        return reply.status(500).send({
           status: "error",
-          message: "The file exceeds the 20 MB limit.",
+          message:
+            "Document upload failed.",
         });
       }
-
-      request.log.error(
-        { err: error },
-        "Document upload failed",
-      );
-
-      return reply.status(500).send({
-        status: "error",
-        message: "Document upload failed.",
-      });
-    }
-  });
+    },
+  );
 }
